@@ -9,7 +9,7 @@ Electron interface.
 
 ![Platform](https://img.shields.io/badge/platform-Windows-0078d4)
 ![Version](https://img.shields.io/badge/version-Alpha--1.0.0-success)
-![License](https://img.shields.io/badge/license-MIT-green)
+![License](https://img.shields.io/badge/license-GPL--3.0-blue)
 
 ## Features
 
@@ -57,5 +57,6 @@ npm run dist       # produce the portable executable in release/
 
 ## License
 
-MIT, inherited from the original Mem Reduct project. All credit for the memory-cleaning
-techniques goes to Henry++ and the Mem Reduct contributors.
+Licensed under the **GNU General Public License v3.0 or later** (GPL-3.0-or-later), the same
+license as the original Mem Reduct project. See the [LICENSE](LICENSE) file for the full text.
+All credit for the memory-cleaning techniques goes to Henry++ and the Mem Reduct contributors.

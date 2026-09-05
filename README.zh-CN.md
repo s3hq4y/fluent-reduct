@@ -7,7 +7,7 @@ Fluent Reduct 是一款轻量级的 Windows 实时内存管理工具。它通过
 
 ![平台](https://img.shields.io/badge/platform-Windows-0078d4)
 ![版本](https://img.shields.io/badge/version-Alpha--1.0.0-success)
-![许可证](https://img.shields.io/badge/license-MIT-green)
+![许可证](https://img.shields.io/badge/license-GPL--3.0-blue)
 
 [English](README.md) | 简体中文
 
@@ -51,4 +51,5 @@ npm run dist       # 在 release/ 目录生成便携版可执行文件
 
 ## 许可证
 
-MIT，继承自原版 Mem Reduct。内存清理相关技术的全部功劳归于 Henry++ 及 Mem Reduct 贡献者。
+基于 **GNU 通用公共许可证 v3.0 或更高版本**（GPL-3.0-or-later）授权，与原版 Mem Reduct 相同。
+完整协议文本见 [LICENSE](LICENSE) 文件。内存清理相关技术的全部功劳归于 Henry++ 及 Mem Reduct 贡献者。

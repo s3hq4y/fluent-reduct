@@ -4,7 +4,7 @@
   "description": "Fluent Reduct - a Fluent-style memory management application (fork of Mem Reduct)",
   "main": "dist/main/main.js",
   "author": "Henry++",
-  "license": "MIT",
+  "license": "GPL-3.0-or-later",
   "scripts": {
     "build:main": "tsc -p tsconfig.main.json --outDir dist/main",
     "build:renderer": "tsc -p tsconfig.renderer.json && node scripts/build-renderer.js",
