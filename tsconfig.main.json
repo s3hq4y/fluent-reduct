@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "lib": ["ES2022"],
+    "outDir": "../dist/main",
+    "rootDir": "src/ui/main",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true
+  },
+  "include": ["src/ui/main/**/*.ts"],
+  "exclude": ["node_modules", "dist", "release"]
+}

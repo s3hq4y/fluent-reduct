@@ -1,0 +1,17 @@
+appId: com.fluentreduct.app
+productName: Fluent Reduct
+directories:
+  output: release
+files:
+  - dist/**/*
+  - package.json
+win:
+  target:
+    - target: portable
+      arch:
+        - x64
+  icon: src/ui/assets/icon.ico
+  signAndEditExecutable: false
+  requestedExecutionLevel: asInvoker
+portable:
+  artifactName: fluent-reduct-portable-${version}.exe
