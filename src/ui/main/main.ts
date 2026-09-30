@@ -1,73 +1,87 @@
 /**
- * Fluent Reduct - Electron main process
- * Handles window management, system tray and IPC communication
+ * Fluent Reduct - Electron main process.
+ *
+ * Owns window/tray lifecycle, persistence and the native memory interface. The
+ * renderer is untrusted: it can only reach these capabilities through the
+ * channel whitelist defined in `preload.ts`.
  */
 
-import { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, screen, dialog, shell } from 'electron';
+import { app, BrowserWindow, Menu, Tray, dialog, ipcMain, nativeImage, screen } from 'electron';
 import * as path from 'path';
-import * as fs from 'fs';
-import { getMemoryInfo, cleanupMemory, getDiagnostics, type CleanupArea } from './memory';
+import type {
+  AppSettings,
+  AutoCleanConfig,
+  CleanupArea,
+  CleanupLogEntry,
+  PersistedState,
+} from '../../shared/types';
+import type { LocaleCode } from '../../shared/i18n/translate';
+import { isLocaleCode } from '../../shared/i18n/translate';
+import { getDiagnostics, getMemoryInfo, cleanupMemory } from './memory';
+import { initLocale, setLocale, t } from './locale';
+import {
+  addLog,
+  clearLogs,
+  getSettings,
+  loadState,
+  resetState,
+  saveAutoClean,
+  saveCleanupConfig,
+  saveSettings,
+} from './store';
 
-// App constants
-const APP_NAME = 'Fluent Reduct';
-// User-facing display version (package.json uses the semver build version 1.0.0-alpha.0)
-const APP_VERSION = 'Alpha-1.0.0';
 const ICON_PATH = path.join(__dirname, '..', 'assets', 'icon.ico');
+const RENDERER_ENTRY = path.join(__dirname, '..', 'renderer', 'index.html');
 
-// Global references
+/**
+ * `minWidth` is set so the three memory rings always fit on one row: below it
+ * the cards would have to shrink past their headers. Keep in sync with the
+ * `clamp()` breakpoints in `styles/main.css`.
+ */
+const WINDOW_SIZE = { width: 560, height: 700, minWidth: 540, minHeight: 600 } as const;
+
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isQuitting = false;
 
-// App state
-interface AppState {
-  isMinimized: boolean;
-  isAlwaysOnTop: boolean;
-  theme: 'light' | 'dark';
-  accentColor: string;
+// ==================== Window ====================
+
+function centeredBounds(): Electron.Rectangle {
+  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
+  return {
+    x: Math.floor((width - WINDOW_SIZE.width) / 2),
+    y: Math.floor((height - WINDOW_SIZE.height) / 2),
+    width: WINDOW_SIZE.width,
+    height: WINDOW_SIZE.height,
+  };
 }
 
-const appState: AppState = {
-  isMinimized: false,
-  isAlwaysOnTop: false,
-  theme: 'light',
-  accentColor: '#0078d4'
-};
+function createMainWindow(settings: AppSettings): void {
+  const bounds = centeredBounds();
 
-/**
- * Create the main window
- */
-function createMainWindow(): void {
-  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
-  
   mainWindow = new BrowserWindow({
-    width: 480,
-    height: 680,
-    x: Math.floor((width - 480) / 2),
-    y: Math.floor((height - 680) / 2),
-    minWidth: 400,
-    minHeight: 600,
+    ...bounds,
+    minWidth: WINDOW_SIZE.minWidth,
+    minHeight: WINDOW_SIZE.minHeight,
     show: false,
     frame: false,
     transparent: false,
     resizable: true,
-    alwaysOnTop: appState.isAlwaysOnTop,
+    alwaysOnTop: settings.alwaysOnTop,
     skipTaskbar: false,
     icon: ICON_PATH,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: false
-    }
+      sandbox: false,
+    },
   });
 
-  // Load the renderer entry
-  mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+  void mainWindow.loadFile(RENDERER_ENTRY);
 
-  // Notify the renderer on maximize / restore / fullscreen changes so the
-  // titlebar button glyph can be toggled accordingly
-  const notifyWindowState = () => {
+  // Keep the titlebar glyph in sync with the real window state.
+  const notifyWindowState = (): void => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     mainWindow.webContents.send('window-state-changed', {
       maximized: mainWindow.isMaximized(),
@@ -80,16 +94,15 @@ function createMainWindow(): void {
   mainWindow.on('leave-full-screen', notifyWindowState);
   mainWindow.on('ready-to-show', notifyWindowState);
 
-  // Show the window once it is ready
   mainWindow.once('ready-to-show', () => {
-    if (appState.isMinimized) {
+    if (settings.startMinimized) {
       mainWindow?.minimize();
     } else {
       mainWindow?.show();
     }
   });
 
-  // Minimize to tray instead of closing
+  // Closing hides to tray instead of quitting.
   mainWindow.on('close', (event) => {
     if (!isQuitting) {
       event.preventDefault();
@@ -101,209 +114,182 @@ function createMainWindow(): void {
     mainWindow = null;
   });
 
-  // Open DevTools (development mode)
   if (process.argv.includes('--dev')) {
     mainWindow.webContents.openDevTools({ mode: 'detach' });
   }
 }
 
-/**
- * Create the system tray
- */
-function createTray(): void {
-  // Create the tray icon
-  const icon = nativeImage.createFromPath(ICON_PATH);
-  tray = new Tray(icon.resize({ width: 16, height: 16 }));
-  
-  tray.setToolTip(`${APP_NAME} v${APP_VERSION}`);
-  
-  // Tray context menu
-  const contextMenu = Menu.buildFromTemplate([
-    {
-      label: '显示主窗口',
-      click: () => {
-        mainWindow?.show();
-        mainWindow?.focus();
-      }
-    },
+function showMainWindow(): void {
+  if (!mainWindow) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
+
+// ==================== Tray ====================
+
+function buildTrayMenu(): Menu {
+  const translate = t();
+  return Menu.buildFromTemplate([
+    { label: translate('tray.show'), click: showMainWindow },
     { type: 'separator' },
     {
-      label: '立即清理内存',
+      label: translate('tray.clean'),
       click: () => {
-        mainWindow?.show();
+        showMainWindow();
         mainWindow?.webContents.send('trigger-cleanup');
-      }
+      },
     },
-    { type: 'separator' },
     {
-      label: '设置',
+      label: translate('tray.settings'),
       click: () => {
-        mainWindow?.show();
+        showMainWindow();
         mainWindow?.webContents.send('open-settings');
-      }
+      },
     },
     { type: 'separator' },
     {
-      label: '退出',
+      label: translate('tray.quit'),
       click: () => {
         isQuitting = true;
         app.quit();
-      }
-    }
+      },
+    },
   ]);
-  
-  tray.setContextMenu(contextMenu);
-  
-  // Double-click the tray icon to show the window
-  tray.on('double-click', () => {
-    mainWindow?.show();
-    mainWindow?.focus();
-  });
 }
 
+function refreshTrayMenu(): void {
+  if (!tray) return;
+  tray.setContextMenu(buildTrayMenu());
+  tray.setToolTip(`${app.getName()} v${app.getVersion()}`);
+}
+
+function createTray(): void {
+  const icon = nativeImage.createFromPath(ICON_PATH);
+  tray = new Tray(icon.resize({ width: 16, height: 16 }));
+  refreshTrayMenu();
+  tray.on('double-click', showMainWindow);
+}
+
+// ==================== Settings side effects ====================
+
 /**
- * Register IPC handlers
+ * Apply the settings that have effects outside the renderer. Called both at
+ * startup and whenever the renderer saves, so the OS state always matches.
  */
+function applySystemSettings(settings: AppSettings): void {
+  app.setLoginItemSettings({ openAtLogin: settings.launchAtLogin });
+  mainWindow?.setAlwaysOnTop(settings.alwaysOnTop);
+}
+
+// ==================== IPC ====================
+
 function registerIpcHandlers(): void {
-  // Window controls
-  ipcMain.on('window-minimize', () => {
-    mainWindow?.minimize();
-  });
+  // ---- Window controls ----
+  ipcMain.on('window-minimize', () => mainWindow?.minimize());
 
   ipcMain.on('window-maximize', () => {
-    if (mainWindow?.isMaximized()) {
-      mainWindow.unmaximize();
-    } else {
-      mainWindow?.maximize();
-    }
+    if (mainWindow?.isMaximized()) mainWindow.unmaximize();
+    else mainWindow?.maximize();
   });
 
-  ipcMain.on('window-close', () => {
-    mainWindow?.hide();
+  ipcMain.on('window-close', () => mainWindow?.hide());
+
+  ipcMain.handle('window-is-maximized', () => mainWindow?.isMaximized() ?? false);
+
+  // ---- App metadata ----
+  ipcMain.handle('app-get-version', () => ({
+    app: app.getVersion(),
+    electron: process.versions.electron,
+    chrome: process.versions.chrome,
+    node: process.versions.node,
+  }));
+
+  // ---- Locale ----
+  ipcMain.on('locale-set', (_event, code: unknown) => {
+    if (!isLocaleCode(code)) return;
+    setLocale(code as LocaleCode);
+    refreshTrayMenu();
   });
 
-  ipcMain.on('window-quit', () => {
-    isQuitting = true;
-    app.quit();
+  // ---- Persistence ----
+  ipcMain.handle('store-load', (): PersistedState => loadState());
+
+  ipcMain.handle('store-save-settings', (_event, settings: AppSettings) => {
+    saveSettings(settings);
+    applySystemSettings(settings);
   });
 
-  // Get window state
-  ipcMain.handle('window-is-maximized', () => {
-    return mainWindow?.isMaximized() ?? false;
+  ipcMain.handle('store-save-cleanup', (_event, config) => {
+    saveCleanupConfig(config);
   });
 
-  // Set window properties
-  ipcMain.on('set-always-on-top', (_, value: boolean) => {
-    appState.isAlwaysOnTop = value;
-    mainWindow?.setAlwaysOnTop(value);
+  ipcMain.handle('store-save-auto-clean', (_event, config: AutoCleanConfig) => {
+    saveAutoClean(config);
   });
 
-  // Get system info
-  ipcMain.handle('get-system-info', () => {
-    return {
-      platform: process.platform,
-      arch: process.arch,
-      version: process.getSystemVersion(),
-      totalMemory: require('os').totalmem(),
-      freeMemory: require('os').freemem(),
-      cpus: require('os').cpus().length
-    };
+  ipcMain.handle('store-add-log', (_event, entry: CleanupLogEntry) => addLog(entry));
+
+  ipcMain.handle('store-clear-logs', () => clearLogs());
+
+  ipcMain.handle('store-reset', (): PersistedState => {
+    const state = resetState();
+    applySystemSettings(state.settings);
+    return state;
   });
 
-  // Open external links
-  ipcMain.on('open-external', (_, url: string) => {
-    shell.openExternal(url);
-  });
+  // ---- Memory (real data) ----
+  ipcMain.handle('memory-get-info', () => getMemoryInfo(t()));
 
-  // Open a folder
-  ipcMain.on('open-folder', (_, folderPath: string) => {
-    shell.openPath(folderPath);
-  });
+  ipcMain.handle('memory-get-diagnostics', () => getDiagnostics(t()));
 
-  // Get app paths
-  ipcMain.handle('get-app-path', (_, name: string) => {
-    return app.getPath(name as any);
-  });
-
-  // Get version info
-  ipcMain.handle('get-version', () => {
-    return {
-      app: APP_VERSION,
-      electron: process.versions.electron,
-      chrome: process.versions.chrome,
-      node: process.versions.node
-    };
-  });
-
-  // ==================== Memory (real data) ====================
-
-  // Read current memory state
-  ipcMain.handle('memory-get-info', () => {
-    return getMemoryInfo();
-  });
-
-  // Perform memory cleanup; progress is pushed via the cleanup-progress event
   ipcMain.handle('memory-cleanup', async (event, areas: CleanupArea[]) => {
-    return cleanupMemory(areas, (progress) => {
+    return cleanupMemory(areas, t(), (progress) => {
       if (!event.sender.isDestroyed()) {
         event.sender.send('cleanup-progress', progress);
       }
     });
   });
-
-  // Diagnostics for native interface / privileges
-  ipcMain.handle('memory-get-diagnostics', () => {
-    return getDiagnostics();
-  });
 }
 
-/**
- * App initialization
- */
+// ==================== Lifecycle ====================
+
 function initialize(): void {
-  // Single-instance lock
-  const gotTheLock = app.requestSingleInstanceLock();
-  
-  if (!gotTheLock) {
+  if (!app.requestSingleInstanceLock()) {
     app.quit();
     return;
   }
 
-  app.on('second-instance', () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) {
-        mainWindow.restore();
-      }
-      mainWindow.show();
-      mainWindow.focus();
-    }
-  });
+  app.on('second-instance', showMainWindow);
 
-  // Register IPC handlers
+  // Resolve the locale first: the tray menu and window title depend on it.
+  const settings = getSettings();
+  initLocale(settings);
+
   registerIpcHandlers();
+  applySystemSettings(settings);
 
-  // Create window and tray
-  createMainWindow();
+  createMainWindow(settings);
   createTray();
 }
 
-// App lifecycle
 app.whenReady().then(initialize);
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
+  if (process.platform !== 'darwin') app.quit();
 });
 
 app.on('activate', () => {
-  if (mainWindow === null) {
-    createMainWindow();
-  } else {
-    mainWindow.show();
-  }
+  if (mainWindow === null) createMainWindow(getSettings());
+  else showMainWindow();
 });
 
 app.on('before-quit', () => {
   isQuitting = true;
 });
+
+// Surface unexpected failures instead of dying silently.
+process.on('uncaughtException', (error) => {
+  dialog.showErrorBox('Fluent Reduct', error.stack || error.message);
+});
+

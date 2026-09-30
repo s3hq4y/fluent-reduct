@@ -1,17 +1,35 @@
+# Single source of truth for packaging. The `build` field in package.json was
+# removed on purpose: electron-builder silently prefers one and ignores the
+# other, which previously hid a missing `asarUnpack`.
 appId: com.fluentreduct.app
 productName: Fluent Reduct
+copyright: Copyright (c) Henry++ and the Fluent Reduct contributors
+
 directories:
   output: release
+  buildResources: src/ui/assets
+
+# Only the compiled output ships; nothing under src/ may be required at runtime.
 files:
   - dist/**/*
   - package.json
+
+# koffi loads a native `.node` binary through require(), which cannot be
+# dlopen'd from inside an asar archive. Unpack it so the native memory
+# interface keeps working in the packaged app.
+asarUnpack:
+  - node_modules/@koromix/**/*
+  - node_modules/koffi/**/*
+
 win:
   target:
     - target: portable
       arch:
         - x64
   icon: src/ui/assets/icon.ico
-  signAndEditExecutable: false
+  # `asInvoker`: readings work unelevated, and cleanup reports a per-area
+  # STATUS_PRIVILEGE_NOT_HELD instead of forcing a UAC prompt at every launch.
   requestedExecutionLevel: asInvoker
+
 portable:
   artifactName: fluent-reduct-portable-${version}.exe

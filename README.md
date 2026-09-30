@@ -26,6 +26,9 @@ Electron interface.
 - **Fluent title bar** — native-style minimize / maximize / close controls, including the
   maximize ⇄ restore glyph that follows the actual window state.
 - **Theming** — light / dark / system theme with a choice of accent colors.
+- **Localization** — Simplified Chinese, English and Japanese, with an OS-language
+  follow mode; the tray menu and window are localized by the main process.
+- **Runs from the tray** — closing the window hides it; quit from the tray menu.
 
 ## Requirements
 
@@ -44,16 +47,46 @@ is required. Right-click and choose **Run as administrator** to enable memory cl
 git clone https://github.com/s3hq4y/fluent-reduct.git
 cd fluent-reduct
 npm install
-npm run build      # compile main + renderer TypeScript
+npm run build      # typecheck, then bundle main + renderer
 npm start          # launch the app
 npm run dist       # produce the portable executable in release/
 ```
+
+Other scripts:
+
+| Script | Purpose |
+| --- | --- |
+| `npm run typecheck` | Type-check both processes without emitting |
+| `npm run dev` | Watch both processes and launch Electron |
+| `npm run verify:i18n` | Check translation keys and placeholders across locales |
+| `npm run verify:memory` | Cross-check readings against Windows performance counters |
+| `npm run test:cleanup` | Run every cleanup area and print the NTSTATUS |
+| `npm run clean` | Remove `dist/` and `release/` |
+
+## Architecture
+
+```
+src/shared/     types, cleanup catalog, defaults, i18n - imported by both processes
+src/ui/main/    Electron main process: window/tray, persistence, native memory API
+src/ui/renderer/Electron renderer: UI, polling, cleanup log
+scripts/        build, dev and verification tooling
+```
+
+The renderer is untrusted: `nodeIntegration` is off and `contextIsolation` is on, so it can
+only reach the main process through the channel whitelist in `preload.ts`. Every setting is
+persisted by the main process (`electron-store`), because settings such as the language and
+start-minimized state are needed before the renderer exists.
+
+Adding a language is a single file plus one registration; see
+`src/shared/i18n/translate.ts`. Adding a cleanup area is a single entry in
+`src/shared/cleanup.ts`.
 
 ## Tech stack
 
 - [Electron](https://www.electronjs.org/) + TypeScript
 - [koffi](https://github.com/Koromix/koffi) for calling Win32/NT APIs from the main process
-- esbuild for bundling the renderer
+- [electron-store](https://github.com/sindresorhus/electron-store) for persistence
+- esbuild for bundling both processes
 
 ## License
 

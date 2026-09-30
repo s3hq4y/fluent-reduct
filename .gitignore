@@ -10,24 +10,6 @@ release/
 build/
 out/
 target/
-# Native C/C++ build artifacts (original memreduct project)
-x64/
-win32/
-arm64/
-bin/32/
-bin/64/
-bin/arm64/
-*.obj
-*.res
-*.tlog
-*.pdb
-*.exp
-*.ilk
-*.iobj
-*.ipch
-*.ipdb
-*.lib
-*.idb
 
 # ==================== Packaged artifacts ====================
 *.exe

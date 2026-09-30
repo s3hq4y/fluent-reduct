@@ -248,17 +248,23 @@ body.is-maximized .titlebar-glyph--restore {
   margin-bottom: var(--spacing-xxl);
 }
 
+/*
+ * The three rings are always shown on a single row. `minmax(0, 1fr)` lets the
+ * columns shrink below their content width so the row never wraps; the cards
+ * scale with `clamp()` and the window enforces a matching minimum width.
+ */
 .memory-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--spacing-lg);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--spacing-md);
 }
 
 .memory-card {
   background: var(--color-surface);
   border-radius: var(--radius-lg);
-  padding: var(--spacing-lg);
+  padding: var(--spacing-md);
   border: 1px solid var(--color-border);
+  min-width: 0;
   transition: box-shadow var(--transition-normal), transform var(--transition-normal);
 }
 
@@ -274,8 +280,9 @@ body.is-maximized .titlebar-glyph--restore {
 .memory-card__header {
   display: flex;
   align-items: center;
-  gap: var(--spacing-md);
-  margin-bottom: var(--spacing-lg);
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-md);
+  min-width: 0;
 }
 
 .memory-card__icon {
@@ -299,15 +306,20 @@ body.is-maximized .titlebar-glyph--restore {
 .memory-card--cache .memory-card__icon svg { color: var(--color-success); }
 
 .memory-card__title {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .memory-card__subtitle {
-  font-size: 10px;
+  display: block;
+  font-size: 9px;
   color: var(--color-text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .memory-card__body {
@@ -321,8 +333,9 @@ body.is-maximized .titlebar-glyph--restore {
 
 .memory-ring {
   position: relative;
-  width: 118px;
-  height: 118px;
+  /* Scales down with the card so three rings always fit on one row. */
+  width: clamp(76px, 24vw, 112px);
+  height: clamp(76px, 24vw, 112px);
   flex-shrink: 0;
 }
 
@@ -366,47 +379,16 @@ body.is-maximized .titlebar-glyph--restore {
 }
 
 .memory-ring__value {
-  font-size: 22px;
+  font-size: clamp(15px, 4.2vw, 21px);
   font-weight: 700;
 }
 
 .memory-ring__sub {
-  font-size: 11px;
+  font-size: clamp(9px, 2.3vw, 11px);
   font-weight: 500;
   color: var(--color-text-secondary);
   margin-top: 2px;
   font-variant-numeric: tabular-nums;
-}
-
-/* ==================== Memory details ==================== */
-
-.memory-details {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.memory-detail {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 4px 0;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.memory-detail:last-child {
-  border-bottom: none;
-}
-
-.memory-detail__label {
-  font-size: 12px;
-  color: var(--color-text-secondary);
-}
-
-.memory-detail__value {
-  font-size: 13px;
-  font-weight: 600;
 }
 
 /* ==================== Cleanup areas ==================== */
@@ -1199,15 +1181,37 @@ body.is-maximized .titlebar-glyph--restore {
   height: 16px;
 }
 
-/* ==================== Responsive ==================== */
+/* ==================== Confirm dialog ==================== */
 
-@media (max-width: 600px) {
-  .memory-grid {
-    grid-template-columns: 1fr;
-  }
+.confirm-modal {
+  max-width: 360px;
+  padding: var(--spacing-xl);
+  text-align: center;
+}
 
-  .memory-card__body {
-    flex-direction: row;
-    align-items: center;
-  }
+.confirm-icon {
+  margin-bottom: var(--spacing-md);
+}
+
+.confirm-icon svg {
+  width: 40px;
+  height: 40px;
+  color: var(--color-accent);
+}
+
+.confirm-message {
+  font-size: 14px;
+  color: var(--color-text);
+  margin-bottom: var(--spacing-xl);
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: center;
+  gap: var(--spacing-sm);
+}
+
+.confirm-actions .btn {
+  min-width: 88px;
+  justify-content: center;
 }

@@ -1,13 +1,19 @@
 /**
- * Fluent Reduct - Memory monitor
+ * Fluent Reduct - renderer-side memory monitor.
  *
- * All data comes from the main process' native Windows interfaces
- * (GlobalMemoryStatusEx / GetPerformanceInfo / NtSetSystemInformation); nothing
- * here is simulated. When real data is unavailable, stay empty and report the
- * error rather than fabricating numbers.
+ * Polls the main process (which owns the native Windows interfaces). When real
+ * data is unavailable the state stays empty and carries the error; numbers are
+ * never fabricated here.
  */
 
-import type { MemoryInfo, MemoryRegion, CleanupArea, CleanupResult } from '../types';
+import type { Translator } from '../../../shared/i18n/translate';
+import type {
+  CleanupArea,
+  CleanupResult,
+  MemoryDiagnostics,
+  MemoryInfo,
+  MemoryRegion,
+} from '../../../shared/types';
 import { createState, type State } from './state';
 
 const EMPTY_REGION: MemoryRegion = {
@@ -28,72 +34,81 @@ function emptyInfo(error?: string): MemoryInfo {
   };
 }
 
-const NO_BRIDGE = '未连接到主进程，无法读取真实内存数据';
+const UNKNOWN_DIAGNOSTICS: MemoryDiagnostics = {
+  platform: 'unknown',
+  arch: 'unknown',
+  nativeAvailable: false,
+  elevated: false,
+  error: null,
+};
 
-// Memory monitor class
 export class MemoryMonitor {
   private timerId: ReturnType<typeof setTimeout> | null = null;
   private intervalMs = 1000;
   private polling = false;
 
-  private _memoryInfo: State<MemoryInfo>;
-  private _isRunning: State<boolean>;
-  private _error: State<string | null>;
+  private readonly info = createState<MemoryInfo>(emptyInfo());
+  private readonly running = createState(false);
+  private readonly lastError = createState<string | null>(null);
 
-  constructor() {
-    this._memoryInfo = createState(emptyInfo());
-    this._isRunning = createState(false);
-    this._error = createState<string | null>(null);
-  }
+  constructor(private readonly t: Translator) {}
 
-  // Get memory info state
   get memoryInfo(): State<MemoryInfo> {
-    return this._memoryInfo;
+    return this.info;
   }
 
-  // Get running state
   get isRunning(): State<boolean> {
-    return this._isRunning;
+    return this.running;
   }
 
-  // Most recent read error (null means OK)
   get error(): State<string | null> {
-    return this._error;
+    return this.lastError;
   }
 
-  // Start monitoring
-  start(interval: number = 1000): void {
-    if (this._isRunning.value) return;
-
-    this.intervalMs = interval;
-    this._isRunning.value = true;
+  start(intervalMs = 1000): void {
+    if (this.running.value) return;
+    this.intervalMs = intervalMs;
+    this.running.value = true;
     void this.tick();
   }
 
-  // Stop monitoring
   stop(): void {
-    if (this.timerId) {
+    if (this.timerId !== null) {
       clearTimeout(this.timerId);
       this.timerId = null;
     }
-    this._isRunning.value = false;
+    this.running.value = false;
   }
 
-  // Refresh once immediately
-  async refresh(): Promise<void> {
+  /** Perform a real memory cleanup through the main process. */
+  async cleanup(areas: CleanupArea[]): Promise<CleanupResult> {
+    const api = window.electronAPI;
+    if (!api?.memory) {
+      throw new Error(this.t('error.noBridge'));
+    }
+
+    const result = await api.memory.cleanup(areas);
+    // Refresh immediately so the UI does not wait for the next poll.
     await this.update();
+    return result;
+  }
+
+  async getDiagnostics(): Promise<MemoryDiagnostics> {
+    const api = window.electronAPI;
+    if (!api?.memory) {
+      return { ...UNKNOWN_DIAGNOSTICS, error: this.t('error.noBridge') };
+    }
+    return api.memory.getDiagnostics();
   }
 
   /**
-   * Polling schedules the next tick only after the previous one finishes,
-   * avoiding request pile-up when IPC is slower than the interval.
+   * Each tick schedules the next one only after the previous read completes, so
+   * slow IPC cannot pile up requests.
    */
   private async tick(): Promise<void> {
-    if (!this._isRunning.value) return;
-
+    if (!this.running.value) return;
     await this.update();
-
-    if (!this._isRunning.value) return;
+    if (!this.running.value) return;
     this.timerId = setTimeout(() => void this.tick(), this.intervalMs);
   }
 
@@ -104,53 +119,21 @@ export class MemoryMonitor {
     try {
       const api = window.electronAPI;
       if (!api?.memory) {
-        this._error.value = NO_BRIDGE;
-        this._memoryInfo.value = emptyInfo(NO_BRIDGE);
+        const message = this.t('error.noBridge');
+        this.lastError.value = message;
+        this.info.value = emptyInfo(message);
         return;
       }
 
       const info = await api.memory.getInfo();
-      this._memoryInfo.value = info;
-      this._error.value = info.source === 'native' ? null : info.error || '原生接口不可用';
+      this.info.value = info;
+      this.lastError.value = info.source === 'native' ? null : info.error ?? this.t('error.nativeUnavailable');
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      this._error.value = message;
-      this._memoryInfo.value = emptyInfo(message);
+      this.lastError.value = message;
+      this.info.value = emptyInfo(message);
     } finally {
       this.polling = false;
     }
   }
-
-  // Perform a real memory cleanup
-  async cleanup(areas: CleanupArea[]): Promise<CleanupResult> {
-    const api = window.electronAPI;
-    if (!api?.memory) {
-      throw new Error(NO_BRIDGE);
-    }
-
-    const result = await api.memory.cleanup(areas);
-
-    // Refresh immediately after cleanup so the UI doesn't wait for the next poll
-    await this.update();
-
-    return result;
-  }
-
-  // Diagnostics for native interface / administrator privileges
-  async getDiagnostics() {
-    const api = window.electronAPI;
-    if (!api?.memory) {
-      return {
-        platform: 'unknown',
-        arch: 'unknown',
-        nativeAvailable: false,
-        elevated: false,
-        error: NO_BRIDGE,
-      };
-    }
-    return api.memory.getDiagnostics();
-  }
 }
-
-// Export singleton
-export const memoryMonitor = new MemoryMonitor();

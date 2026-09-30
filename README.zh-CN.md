@@ -20,6 +20,8 @@ Fluent Reduct 是一款轻量级的 Windows 实时内存管理工具。它通过
 - **清理日志** —— 在界面上持久化记录每次清理（时间、结果、释放内存、清理前后使用率）。
 - **Fluent 标题栏** —— 贴近 Windows 原生的最小化 / 最大化 / 关闭控件，中间按钮会随窗口最大化状态在「最大化 ⇄ 还原」字形间切换。
 - **主题** —— 亮色 / 暗色 / 跟随系统，并提供多种主题色。
+- **多语言** —— 简体中文、English、日本語，支持跟随系统语言；托盘菜单与窗口标题由主进程本地化。
+- **驻留托盘** —— 关闭窗口只是隐藏，从托盘菜单退出。
 
 ## 运行要求
 
@@ -38,16 +40,44 @@ Fluent Reduct 是一款轻量级的 Windows 实时内存管理工具。它通过
 git clone https://github.com/s3hq4y/fluent-reduct.git
 cd fluent-reduct
 npm install
-npm run build      # 编译主进程 + 渲染进程 TypeScript
+npm run build      # 类型检查，然后打包主进程 + 渲染进程
 npm start          # 启动应用
 npm run dist       # 在 release/ 目录生成便携版可执行文件
 ```
+
+其他脚本：
+
+| 脚本 | 用途 |
+| --- | --- |
+| `npm run typecheck` | 对两个进程做类型检查，不产出文件 |
+| `npm run dev` | 监听两个进程并启动 Electron |
+| `npm run verify:i18n` | 校验各语言之间的键与占位符是否一致 |
+| `npm run verify:memory` | 与 Windows 性能计数器交叉比对读数 |
+| `npm run test:cleanup` | 逐个执行清理区域并打印 NTSTATUS |
+| `npm run clean` | 删除 `dist/` 与 `release/` |
+
+## 项目结构
+
+```
+src/shared/     类型、清理区域目录、默认值、i18n —— 两个进程共用
+src/ui/main/    Electron 主进程：窗口/托盘、持久化、原生内存接口
+src/ui/renderer/Electron 渲染进程：界面、轮询、清理日志
+scripts/        构建、开发与校验工具
+```
+
+渲染进程不被信任：`nodeIntegration` 关闭、`contextIsolation` 打开，只能通过
+`preload.ts` 中白名单化的通道访问主进程。所有设置都由主进程（`electron-store`）
+持久化，因为语言、启动时最小化等设置必须在渲染进程创建之前就已确定。
+
+新增一门语言只需加一个文件并注册一次，见 `src/shared/i18n/translate.ts`；
+新增一个清理区域只需在 `src/shared/cleanup.ts` 中加一条。
 
 ## 技术栈
 
 - [Electron](https://www.electronjs.org/) + TypeScript
 - [koffi](https://github.com/Koromix/koffi)：在主进程中调用 Win32/NT 接口
-- esbuild：打包渲染进程
+- [electron-store](https://github.com/sindresorhus/electron-store)：持久化设置
+- esbuild：打包主进程与渲染进程
 
 ## 许可证
 

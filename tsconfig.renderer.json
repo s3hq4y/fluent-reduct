@@ -1,18 +1,10 @@
 {
+  "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "target": "ES2022",
     "module": "ES2022",
+    "moduleResolution": "bundler",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "outDir": "../dist/renderer",
-    "rootDir": "src/ui/renderer",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true,
-    "sourceMap": true,
-    "moduleResolution": "bundler"
+    "types": []
   },
-  "include": ["src/ui/renderer/**/*.ts"],
-  "exclude": ["node_modules", "dist", "release"]
+  "include": ["src/ui/renderer/**/*.ts", "src/shared/**/*.ts"]
 }
