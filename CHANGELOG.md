@@ -1,3 +1,26 @@
+# Fluent Reduct
+
+<!--
+Entries above the divider describe this fork; everything below it is the
+upstream Mem Reduct changelog, kept for reference.
+-->
+
+## 1.0.0-alpha.1
+
+- Cleanup is now owned by the main process, so a run no longer has to reveal
+the main window; the floating ball's double-click cleans silently and reports
+the freed amount on the ball itself.
+- The floating ball docks to the nearest screen edge when dropped close to it,
+collapsing to a thin usage bar that expands again on hover.
+- Added a confirmation dialog in place of `window.confirm`, so prompts follow
+the app theme and translations.
+- Added an installer alongside the portable executable.
+- Removed the unused native C project and its localisation files.
+
+---
+
+# Upstream Mem Reduct
+
 v3.5.2 (1 April 2025)
 
 \- added modified file cache clean

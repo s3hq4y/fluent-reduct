@@ -1,13 +1,12 @@
 /**
  * Renderer build.
  *
- * Bundles the renderer TypeScript with esbuild and stages every runtime asset
- * into dist/. electron-builder only ships `dist/**` + `package.json`, so nothing
+ * Bundles each UI window with esbuild and stages every runtime asset into
+ * dist/. electron-builder only ships `dist/**` + `package.json`, so nothing
  * under src/ may be required at runtime.
  *
- * `src/ui/renderer/index.html` references `./styles/main.css` and `./app.js` -
- * i.e. paths relative to the built output - so the staged copy needs no
- * rewriting.
+ * Each window declares its own entry point and static files, so adding a window
+ * is one entry in WINDOWS below rather than a new build script.
  */
 
 const esbuild = require('esbuild');
@@ -17,28 +16,46 @@ const { copyFile, ensureDir, firstExisting } = require('./lib/fs-utils');
 const isWatch = process.argv.includes('--watch');
 
 const ROOT = path.join(__dirname, '..');
-const RENDERER_SRC = path.join(ROOT, 'src', 'ui', 'renderer');
-const RENDERER_OUT = path.join(ROOT, 'dist', 'renderer');
-const ASSETS_OUT = path.join(ROOT, 'dist', 'assets');
+const UI_SRC = path.join(ROOT, 'src', 'ui');
+const DIST = path.join(ROOT, 'dist');
+const ASSETS_OUT = path.join(DIST, 'assets');
 
 /** Icons in preference order; the first that exists wins. */
-const ICON_CANDIDATES = [path.join(ROOT, 'src', 'ui', 'assets', 'icon.ico')];
+const ICON_CANDIDATES = [path.join(UI_SRC, 'assets', 'icon.ico')];
 
-/** Static files copied verbatim into dist/renderer. */
-const STATIC_FILES = [
-  { from: path.join(RENDERER_SRC, 'index.html'), to: path.join(RENDERER_OUT, 'index.html') },
+/**
+ * Every renderer window: where it is built from, where it lands, and which
+ * static files it needs copied verbatim.
+ *
+ * `index.html` references `./app.js` / `./ball.js` and `./styles/main.css`, i.e.
+ * paths relative to the built output, so the staged copies need no rewriting.
+ */
+const WINDOWS = [
   {
-    from: path.join(RENDERER_SRC, 'styles', 'main.css'),
-    to: path.join(RENDERER_OUT, 'styles', 'main.css'),
+    name: 'renderer',
+    outDir: path.join(DIST, 'renderer'),
+    entry: path.join(UI_SRC, 'renderer', 'app.ts'),
+    staticFiles: [
+      { from: path.join(UI_SRC, 'renderer', 'index.html'), to: 'index.html' },
+      { from: path.join(UI_SRC, 'renderer', 'styles', 'main.css'), to: 'styles/main.css' },
+    ],
+  },
+  {
+    name: 'ball',
+    outDir: path.join(DIST, 'ball'),
+    entry: path.join(UI_SRC, 'ball', 'ball.ts'),
+    staticFiles: [{ from: path.join(UI_SRC, 'ball', 'index.html'), to: 'index.html' }],
   },
 ];
 
 function stageAssets() {
-  ensureDir(RENDERER_OUT);
   ensureDir(ASSETS_OUT);
 
-  for (const file of STATIC_FILES) {
-    copyFile(file.from, file.to);
+  for (const window of WINDOWS) {
+    ensureDir(window.outDir);
+    for (const file of window.staticFiles) {
+      copyFile(file.from, path.join(window.outDir, file.to));
+    }
   }
 
   const icon = firstExisting(ICON_CANDIDATES);
@@ -51,10 +68,10 @@ function stageAssets() {
   console.log('Renderer assets staged into dist/');
 }
 
-/** @type {import('esbuild').BuildOptions} */
-const options = {
-  entryPoints: [path.join(RENDERER_SRC, 'app.ts')],
-  outfile: path.join(RENDERER_OUT, 'app.js'),
+/** @type {import('esbuild').BuildOptions[]} */
+const buildOptions = WINDOWS.map((window) => ({
+  entryPoints: [window.entry],
+  outfile: path.join(window.outDir, path.basename(window.entry).replace(/\.ts$/, '.js')),
   bundle: true,
   platform: 'browser',
   target: 'es2022',
@@ -64,19 +81,19 @@ const options = {
   define: {
     'process.env.NODE_ENV': isWatch ? '"development"' : '"production"',
   },
-};
+}));
 
 async function build() {
   if (isWatch) {
-    const ctx = await esbuild.context(options);
-    await ctx.rebuild();
+    const contexts = await Promise.all(buildOptions.map((options) => esbuild.context(options)));
+    await Promise.all(contexts.map((context) => context.rebuild()));
     stageAssets();
-    await ctx.watch();
-    console.log('Watching renderer for changes...');
+    await Promise.all(contexts.map((context) => context.watch()));
+    console.log('Watching renderer windows for changes...');
     return;
   }
 
-  await esbuild.build(options);
+  await Promise.all(buildOptions.map((options) => esbuild.build(options)));
   stageAssets();
   console.log('Renderer build complete');
 }

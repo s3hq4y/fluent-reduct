@@ -8,7 +8,7 @@ system interfaces as the original Mem Reduct, presented behind a modern, Fluent-
 Electron interface.
 
 ![Platform](https://img.shields.io/badge/platform-Windows-0078d4)
-![Version](https://img.shields.io/badge/version-Alpha--1.0.0-success)
+![Version](https://img.shields.io/badge/version-1.0.0--alpha.1-success)
 ![License](https://img.shields.io/badge/license-GPL--3.0-blue)
 
 ## Features

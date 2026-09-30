@@ -102,6 +102,13 @@ export const ja: Translations = {
   'settings.group.language': '言語',
   'settings.group.advanced': '詳細オプション',
   'settings.group.data': 'データ',
+  'settings.group.ball': 'フローティングボール',
+  'settings.floatingBall': 'クリーンアップボールを表示',
+
+  // Floating ball
+  'ball.menu.clean': '今すぐメモリを整理',
+  'ball.menu.showWindow': 'メインウィンドウを表示',
+  'ball.menu.hide': 'ボールを隠す',
   'theme.light': 'ライト',
   'theme.dark': 'ダーク',
   'theme.system': 'システムに従う',

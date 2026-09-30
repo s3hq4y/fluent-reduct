@@ -102,6 +102,13 @@ export const en: Translations = {
   'settings.group.language': 'Language',
   'settings.group.advanced': 'Advanced options',
   'settings.group.data': 'Data',
+  'settings.group.ball': 'Floating ball',
+  'settings.floatingBall': 'Show cleanup ball',
+
+  // Floating ball
+  'ball.menu.clean': 'Clean memory now',
+  'ball.menu.showWindow': 'Show window',
+  'ball.menu.hide': 'Hide ball',
   'theme.light': 'Light',
   'theme.dark': 'Dark',
   'theme.system': 'System',

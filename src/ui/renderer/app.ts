@@ -39,7 +39,7 @@ import { ConfirmDialog } from './components/confirm-dialog';
 import { LogList } from './components/log-list';
 import { ToastManager } from './components/toast';
 import { applyDocumentLanguage, applyStaticTranslations, resolveUiLocale } from './utils/i18n';
-import { formatBytes, formatFreeTotal } from './utils/format';
+import { formatBytes, formatFreeTotal } from '../../shared/format';
 import { MemoryMonitor } from './utils/memory';
 import { themeManager } from './utils/theme';
 
@@ -244,15 +244,26 @@ class Application {
     void window.electronAPI?.store.saveCleanupConfig(this.state.cleanupConfig);
   }
 
-  /** Manual cleanup entry point: ask first when the confirmation option is on. */
-  private async requestCleanup(): Promise<void> {
-    if (this.state.settings.confirmClean) {
+  /**
+   * Manual cleanup entry point: ask first when the confirmation option is on.
+   *
+   * `skipConfirmation` is used by the floating ball. Its double-click is already
+   * an explicit action, and the confirmation dialog lives in this window, which
+   * a ball-initiated run must never reveal.
+   */
+  private async requestCleanup(skipConfirmation = false): Promise<void> {
+    if (this.state.settings.confirmClean && !skipConfirmation) {
       const confirmed = await this.confirmDialog.ask({
         message: this.t('confirm.clean'),
         confirmLabel: this.t('btn.ok'),
         cancelLabel: this.t('btn.cancel'),
       });
-      if (!confirmed) return;
+      if (!confirmed) {
+        // Release the ball's busy state: nothing will run, so no other event
+        // will arrive to clear it.
+        window.electronAPI?.memory.notifyCleanupFinished(0);
+        return;
+      }
     }
     await this.performCleanup(false);
   }
@@ -276,6 +287,7 @@ class Application {
   }
 
   private async performCleanup(auto: boolean): Promise<void> {
+    // A run is already in flight; its own completion releases the ball.
     if (this.isCleaning) return;
 
     const areas = this.selectedAreas(auto);
@@ -285,11 +297,14 @@ class Application {
         message: this.t('toast.selectArea'),
         type: 'warning',
       });
+      window.electronAPI?.memory.notifyCleanupFinished(0);
       return;
     }
 
     this.isCleaning = true;
     this.lastCleanupAt = Date.now();
+    // Reported to the ball on every exit path so it always stops showing progress.
+    let freed = 0;
 
     const progressModal = byId('modal-progress');
     const progressFill = byId('progress-fill');
@@ -314,6 +329,7 @@ class Application {
 
     try {
       const result = await this.monitor.cleanup(areas);
+      freed = result.freedMemory;
       progressFill.style.width = '100%';
       progressText.textContent = this.t('progress.done');
       await this.recordCleanup(result, areas.length, auto);
@@ -342,6 +358,8 @@ class Application {
       cleanButton.disabled = false;
       byId('status-text').textContent = this.t('status.ready');
       this.isCleaning = false;
+      // Release the floating ball's busy state and let it report the result.
+      window.electronAPI?.memory.notifyCleanupFinished(freed);
     }
   }
 
@@ -465,6 +483,7 @@ class Application {
       ['setting-show-result', settings.showResult],
       ['setting-log', settings.logResults],
       ['setting-allow-standby', settings.allowStandbyList],
+      ['setting-floating-ball', settings.floatingBall.enabled],
     ];
     for (const [id, value] of checkboxes) {
       byId<HTMLInputElement>(id).checked = value;
@@ -547,6 +566,10 @@ class Application {
       showResult: byId<HTMLInputElement>('setting-show-result').checked,
       logResults: byId<HTMLInputElement>('setting-log').checked,
       allowStandbyList: byId<HTMLInputElement>('setting-allow-standby').checked,
+      floatingBall: {
+        ...this.state.settings.floatingBall,
+        enabled: byId<HTMLInputElement>('setting-floating-ball').checked,
+      },
     };
 
     const autoClean: AutoCleanConfig = {
@@ -672,8 +695,9 @@ class Application {
     const api = window.electronAPI;
     if (!api) return;
 
-    // The tray entry point honours the same confirmation setting as the button.
-    api.on.triggerCleanup(() => void this.requestCleanup());
+    // The tray reveals this window first, so it keeps the confirmation prompt;
+    // a ball-initiated run skips it and stays invisible.
+    api.on.triggerCleanup((trigger) => void this.requestCleanup(trigger.skipConfirmation));
     api.on.openSettings(() => this.openSettings());
     api.on.windowStateChange((state) => this.syncWindowState(state));
 

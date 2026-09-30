@@ -103,6 +103,13 @@ export const zhCN = {
   'settings.group.language': '语言',
   'settings.group.advanced': '高级选项',
   'settings.group.data': '数据',
+  'settings.group.ball': '悬浮球',
+  'settings.floatingBall': '显示清理悬浮球',
+
+  // Floating ball
+  'ball.menu.clean': '立即清理内存',
+  'ball.menu.showWindow': '显示主窗口',
+  'ball.menu.hide': '隐藏悬浮球',
   'theme.light': '亮色',
   'theme.dark': '暗色',
   'theme.system': '跟随系统',

@@ -10,10 +10,12 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type {
   AppSettings,
   AutoCleanConfig,
+  BallDockState,
   CleanupArea,
   CleanupConfig,
   CleanupLogEntry,
   CleanupProgressEvent,
+  CleanupTrigger,
   ElectronAPI,
   PersistedState,
   WindowState,
@@ -51,6 +53,7 @@ const api: ElectronAPI = {
     getInfo: () => ipcRenderer.invoke('memory-get-info'),
     cleanup: (areas: CleanupArea[]) => ipcRenderer.invoke('memory-cleanup', areas),
     getDiagnostics: () => ipcRenderer.invoke('memory-get-diagnostics'),
+    notifyCleanupFinished: (freed: number) => ipcRenderer.send('cleanup-finished', freed),
   },
 
   store: {
@@ -69,11 +72,25 @@ const api: ElectronAPI = {
     set: (code: LocaleCode) => ipcRenderer.send('locale-set', code),
   },
 
+  ball: {
+    setPosition: (x: number, y: number) => ipcRenderer.send('ball-set-position', x, y),
+    commitPosition: () => ipcRenderer.send('ball-commit-position'),
+    setHover: (inside: boolean) => ipcRenderer.send('ball-set-hover', inside),
+    requestCleanup: () => ipcRenderer.send('ball-request-cleanup'),
+    showMainWindow: () => ipcRenderer.send('ball-show-main-window'),
+    disable: () => ipcRenderer.send('ball-disable'),
+  },
+
   on: {
-    triggerCleanup: (callback: () => void) => subscribeVoid('trigger-cleanup', callback),
+    triggerCleanup: (callback: (trigger: CleanupTrigger) => void) =>
+      subscribe<CleanupTrigger>('trigger-cleanup', callback),
     openSettings: (callback: () => void) => subscribeVoid('open-settings', callback),
     cleanupProgress: (callback: (progress: CleanupProgressEvent) => void) =>
       subscribe<CleanupProgressEvent>('cleanup-progress', callback),
+    cleanupFinished: (callback: (freed: number) => void) =>
+      subscribe<number>('cleanup-finished', callback),
+    ballDockChange: (callback: (state: BallDockState) => void) =>
+      subscribe<BallDockState>('ball-dock', callback),
     windowStateChange: (callback: (state: WindowState) => void) =>
       subscribe<WindowState>('window-state-changed', callback),
   },

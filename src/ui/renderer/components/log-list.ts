@@ -2,9 +2,9 @@
  * Fluent Reduct - cleanup log list.
  */
 
+import { formatBytes } from '../../../shared/format';
 import type { Translator } from '../../../shared/i18n/translate';
 import type { CleanupLogEntry, CleanupLogStatus } from '../../../shared/types';
-import { formatBytes } from '../utils/format';
 
 const STATUS_LABEL_KEYS: Record<CleanupLogStatus, 'log.status.success' | 'log.status.partial' | 'log.status.failed'> = {
   success: 'log.status.success',

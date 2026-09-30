@@ -111,6 +111,31 @@ export interface ThemeConfig {
   accentColor: string;
 }
 
+// ==================== Floating cleanup ball ====================
+
+/** Screen position of the floating ball, in device-independent pixels. */
+export interface BallPosition {
+  x: number;
+  y: number;
+}
+
+/** Screen edge the ball can attach to. */
+export type BallEdge = 'left' | 'right' | 'top' | 'bottom';
+
+/** Dock state pushed from the main process to the ball window. */
+export interface BallDockState {
+  /** Edge the ball is attached to, or null when floating freely. */
+  edge: BallEdge | null;
+  /** Whether the ball is collapsed to a bar (docked and not being pointed at). */
+  collapsed: boolean;
+}
+
+export interface FloatingBallConfig {
+  enabled: boolean;
+  /** Last position, or null to use the default bottom-right corner. */
+  position: BallPosition | null;
+}
+
 // ==================== Settings ====================
 
 export interface AppSettings {
@@ -129,6 +154,7 @@ export interface AppSettings {
   /** Usage percentage at which the status badge turns to danger. */
   dangerLevel: number;
   theme: ThemeConfig;
+  floatingBall: FloatingBallConfig;
 }
 
 // ==================== Cleanup log ====================
@@ -192,6 +218,17 @@ export interface ToastOptions {
 
 // ==================== IPC surface ====================
 
+/**
+ * How a cleanup run was started.
+ *
+ * The floating ball is already an explicit user action, and its cleanup must
+ * not reveal the main window - so its runs skip the confirmation prompt, which
+ * lives in that window.
+ */
+export interface CleanupTrigger {
+  skipConfirmation: boolean;
+}
+
 /** The API `preload` exposes on `window.electronAPI`. */
 export interface ElectronAPI {
   window: {
@@ -209,6 +246,12 @@ export interface ElectronAPI {
     getInfo: () => Promise<MemoryInfo>;
     cleanup: (areas: CleanupArea[]) => Promise<CleanupResult>;
     getDiagnostics: () => Promise<MemoryDiagnostics>;
+    /**
+     * Report that a cleanup attempt has settled, including when the user
+     * cancelled the confirmation, so the ball can leave its busy state.
+     * `freed` is the number of bytes reclaimed, or 0 when nothing ran.
+     */
+    notifyCleanupFinished: (freed: number) => void;
   };
 
   store: {
@@ -226,10 +269,40 @@ export interface ElectronAPI {
     set: (code: LocaleCode) => void;
   };
 
+  /**
+   * Floating cleanup ball. Exposed to both windows because they share one
+   * preload script; only the ball window actually calls these.
+   */
+  ball: {
+    /** Live-drag the ball to an absolute screen position (clamped by the main process). */
+    setPosition: (x: number, y: number) => void;
+    /** Persist the current position and re-evaluate edge docking; sent on drop. */
+    commitPosition: () => void;
+    /**
+     * Report pointer enter/leave. A docked ball expands while pointed at and
+     * collapses again once the pointer leaves.
+     */
+    setHover: (inside: boolean) => void;
+    /**
+     * Ask the main process to run a cleanup. Runs without revealing the main
+     * window and without a confirmation prompt.
+     */
+    requestCleanup: () => void;
+    /** Show the main window (right-click menu). */
+    showMainWindow: () => void;
+    /** Hide the ball (right-click menu). */
+    disable: () => void;
+  };
+
   on: {
-    triggerCleanup: (callback: () => void) => () => void;
+    /** Fired when the tray or the floating ball asks for a cleanup. */
+    triggerCleanup: (callback: (trigger: CleanupTrigger) => void) => () => void;
     openSettings: (callback: () => void) => () => void;
     cleanupProgress: (callback: (progress: CleanupProgressEvent) => void) => () => void;
+    /** Fired when a cleanup run settles; carries the bytes reclaimed. */
+    cleanupFinished: (callback: (freed: number) => void) => () => void;
+    /** Dock state changes: which edge the ball is on, and whether it is collapsed. */
+    ballDockChange: (callback: (state: BallDockState) => void) => () => void;
     windowStateChange: (callback: (state: WindowState) => void) => () => void;
   };
 }

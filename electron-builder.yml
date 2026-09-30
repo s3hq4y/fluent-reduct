@@ -23,6 +23,9 @@ asarUnpack:
 
 win:
   target:
+    - target: nsis
+      arch:
+        - x64
     - target: portable
       arch:
         - x64
@@ -30,6 +33,16 @@ win:
   # `asInvoker`: readings work unelevated, and cleanup reports a per-area
   # STATUS_PRIVILEGE_NOT_HELD instead of forcing a UAC prompt at every launch.
   requestedExecutionLevel: asInvoker
+
+nsis:
+  # A per-user install needs no elevation, matching the portable build.
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Fluent Reduct
+  artifactName: fluent-reduct-setup-${version}.exe
 
 portable:
   artifactName: fluent-reduct-portable-${version}.exe

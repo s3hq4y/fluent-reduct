@@ -14,6 +14,7 @@ import type {
   CleanupConfig,
   CleanupLogEntry,
   CleanupLogStatus,
+  FloatingBallConfig,
   PersistedState,
   ThemeMode,
 } from './types';
@@ -34,6 +35,11 @@ export const AUTO_CLEAN_DEFAULTS: AutoCleanConfig = {
   interval: 30,
 };
 
+export const FLOATING_BALL_DEFAULTS: FloatingBallConfig = {
+  enabled: false,
+  position: null,
+};
+
 export const SETTINGS_DEFAULTS: AppSettings = {
   language: 'system',
   launchAtLogin: false,
@@ -46,6 +52,7 @@ export const SETTINGS_DEFAULTS: AppSettings = {
   warningLevel: 70,
   dangerLevel: 90,
   theme: DEFAULT_THEME,
+  floatingBall: FLOATING_BALL_DEFAULTS,
 };
 
 export const CLEANUP_DEFAULTS: CleanupConfig = {
@@ -95,6 +102,21 @@ function normalizeTheme(raw: unknown): AppSettings['theme'] {
   return { mode, accentColor };
 }
 
+function normalizeBallPosition(raw: unknown): FloatingBallConfig['position'] {
+  if (!isRecord(raw)) return null;
+  if (typeof raw.x !== 'number' || typeof raw.y !== 'number') return null;
+  if (!Number.isFinite(raw.x) || !Number.isFinite(raw.y)) return null;
+  return { x: Math.round(raw.x), y: Math.round(raw.y) };
+}
+
+function normalizeFloatingBall(raw: unknown): FloatingBallConfig {
+  if (!isRecord(raw)) return { ...FLOATING_BALL_DEFAULTS };
+  return {
+    enabled: pickBoolean(raw.enabled, FLOATING_BALL_DEFAULTS.enabled),
+    position: normalizeBallPosition(raw.position),
+  };
+}
+
 function normalizeSettings(raw: unknown): AppSettings {
   const source = isRecord(raw) ? raw : {};
   const language =
@@ -114,6 +136,7 @@ function normalizeSettings(raw: unknown): AppSettings {
     warningLevel: pickNumber(source.warningLevel, SETTINGS_DEFAULTS.warningLevel, 0, 100),
     dangerLevel: pickNumber(source.dangerLevel, SETTINGS_DEFAULTS.dangerLevel, 0, 100),
     theme: normalizeTheme(source.theme),
+    floatingBall: normalizeFloatingBall(source.floatingBall),
   };
 }
 

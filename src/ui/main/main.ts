@@ -18,6 +18,14 @@ import type {
 import type { LocaleCode } from '../../shared/i18n/translate';
 import { isLocaleCode } from '../../shared/i18n/translate';
 import { getDiagnostics, getMemoryInfo, cleanupMemory } from './memory';
+import {
+  applyBallConfig,
+  commitBallPosition,
+  isBallVisible,
+  moveBall,
+  sendToBall,
+  setBallHover,
+} from './ball';
 import { initLocale, setLocale, t } from './locale';
 import {
   addLog,
@@ -126,6 +134,21 @@ function showMainWindow(): void {
   mainWindow.focus();
 }
 
+/**
+ * Run a cleanup in the renderer that owns the orchestration.
+ *
+ * The main window does the work even when hidden: it is the only place that
+ * holds the confirmation dialog, the progress UI and the cleanup log. When
+ * `reveal` is false the window stays hidden throughout, so a cleanup started
+ * from the floating ball is invisible apart from the ball's own feedback.
+ */
+function requestCleanup(options: { reveal: boolean }): void {
+  if (options.reveal) showMainWindow();
+
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send('trigger-cleanup', { skipConfirmation: !options.reveal });
+}
+
 // ==================== Tray ====================
 
 function buildTrayMenu(): Menu {
@@ -135,10 +158,7 @@ function buildTrayMenu(): Menu {
     { type: 'separator' },
     {
       label: translate('tray.clean'),
-      click: () => {
-        showMainWindow();
-        mainWindow?.webContents.send('trigger-cleanup');
-      },
+      click: () => requestCleanup({ reveal: true }),
     },
     {
       label: translate('tray.settings'),
@@ -180,6 +200,14 @@ function createTray(): void {
 function applySystemSettings(settings: AppSettings): void {
   app.setLoginItemSettings({ openAtLogin: settings.launchAtLogin });
   mainWindow?.setAlwaysOnTop(settings.alwaysOnTop);
+  applyBallConfig(settings.floatingBall);
+}
+
+/** Persist a partial settings change without disturbing the rest of the state. */
+function patchSettings(patch: Partial<AppSettings>): void {
+  const settings = { ...getSettings(), ...patch };
+  saveSettings(settings);
+  applySystemSettings(settings);
 }
 
 // ==================== IPC ====================
@@ -248,7 +276,49 @@ function registerIpcHandlers(): void {
       if (!event.sender.isDestroyed()) {
         event.sender.send('cleanup-progress', progress);
       }
+      // The ball mirrors the run even though the main window drives it.
+      sendToBall('cleanup-progress', progress);
     });
+  });
+
+  // ---- Floating ball ----
+  // The ball is a separate window sharing this preload, so these channels are
+  // technically reachable from the main window too. Every handler is a no-op
+  // when the ball does not exist, so that is harmless.
+  ipcMain.on('ball-set-position', (_event, x: unknown, y: unknown) => {
+    if (typeof x !== 'number' || typeof y !== 'number') return;
+    moveBall(x, y);
+  });
+
+  ipcMain.on('ball-set-hover', (_event, inside: unknown) => {
+    if (typeof inside !== 'boolean') return;
+    setBallHover(inside);
+  });
+
+  ipcMain.on('ball-commit-position', () => {
+    if (!isBallVisible()) return;
+    const current = getSettings().floatingBall;
+    patchSettings({ floatingBall: { ...current, position: commitBallPosition() } });
+  });
+
+  // The ball must never reveal the main window, and double-clicking it is an
+  // explicit enough action to skip the confirmation prompt (which would have to
+  // be shown in that window).
+  ipcMain.on('ball-request-cleanup', () => requestCleanup({ reveal: false }));
+
+  ipcMain.on('ball-show-main-window', showMainWindow);
+
+  ipcMain.on('ball-disable', () => {
+    const current = getSettings().floatingBall;
+    patchSettings({ floatingBall: { ...current, enabled: false } });
+  });
+
+  // ---- Cleanup lifecycle ----
+  // The main window owns the run and reports when it settles, so the ball can
+  // leave its busy state even when the user cancels the confirmation.
+  ipcMain.on('cleanup-finished', (event, freed: unknown) => {
+    if (event.sender !== mainWindow?.webContents) return;
+    sendToBall('cleanup-finished', typeof freed === 'number' ? freed : 0);
   });
 }
 

@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'self'">
+  <title>Fluent Reduct Ball</title>
+  <style>
+    /*
+     * Self-contained on purpose: the ball is a tiny always-on-top window, so it
+     * does not need the full application stylesheet (which assumes a page
+     * layout) and loading it would cost more than it is worth.
+     *
+     * The window is resized by the main process to match the current shape, so
+     * `html`/`body` are simply the whole window and the visible element fills
+     * them. That keeps the two shapes pixel-exact without a layout pass.
+     */
+    :root {
+      --ball-accent: #0078d4;
+      --ball-accent-hover: #106ebe;
+      --ball-text: #ffffff;
+      --ball-track: rgba(255, 255, 255, 0.28);
+      --ball-shadow: 0 4px 14px rgba(0, 0, 0, 0.32);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: transparent;
+      user-select: none;
+      cursor: grab;
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    body.is-dragging {
+      cursor: grabbing;
+    }
+
+    /* ==================== Full ball ==================== */
+
+    .ball {
+      position: absolute;
+      inset: 4px;
+      border-radius: 50%;
+      background: var(--ball-accent);
+      color: var(--ball-text);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: var(--ball-shadow);
+      transition: background 150ms ease;
+    }
+
+    .ball:hover {
+      background: var(--ball-accent-hover);
+    }
+
+    /* Circular usage indicator drawn over the ball edge. */
+    .ball__ring {
+      position: absolute;
+      inset: 0;
+      transform: rotate(-90deg);
+      pointer-events: none;
+    }
+
+    .ball__ring circle {
+      fill: none;
+      stroke-width: 4;
+      stroke-linecap: round;
+    }
+
+    .ball__ring-bg {
+      stroke: var(--ball-track);
+    }
+
+    .ball__ring-fill {
+      stroke: var(--ball-text);
+      stroke-dasharray: 175.93;
+      stroke-dashoffset: 175.93;
+      transition: stroke-dashoffset 0.5s ease;
+    }
+
+    .ball__content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      line-height: 1.05;
+      pointer-events: none;
+    }
+
+    .ball__percent {
+      font-size: 17px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .ball__hint {
+      font-size: 9px;
+      opacity: 0.85;
+    }
+
+    /* ==================== Collapsed edge bar ==================== */
+
+    /*
+     * A thin bar hugging the screen edge. Its long axis is always the edge it
+     * is attached to, so the fill level reads from whichever side is visible.
+     * The fill grows from the screen edge outwards.
+     */
+    .bar {
+      position: absolute;
+      inset: 0;
+      border-radius: 3px;
+      background: var(--ball-track);
+      overflow: hidden;
+      box-shadow: 0 0 6px rgba(0, 0, 0, 0.28);
+    }
+
+    .bar__fill {
+      position: absolute;
+      background: var(--ball-accent);
+      transition: width 0.5s ease, height 0.5s ease, background 150ms ease;
+    }
+
+    /*
+     * The fill always spans the bar's full thickness and grows along the edge.
+     * Which dimension that is depends on the edge, so the renderer only sets
+     * --bar-level; setting width and height directly would fight these rules
+     * (left/right with width over-constrains the box) and leave the fill
+     * hugging one side instead of filling the bar.
+     */
+
+    /* Vertical edges: full thickness, growing downwards from the top. */
+    body[data-edge='left'] .bar__fill,
+    body[data-edge='right'] .bar__fill {
+      left: 0;
+      right: 0;
+      top: 0;
+      height: var(--bar-level, 0%);
+    }
+
+    /* Horizontal edges: full thickness, growing rightwards from the left. */
+    body[data-edge='top'] .bar__fill,
+    body[data-edge='bottom'] .bar__fill {
+      top: 0;
+      bottom: 0;
+      left: 0;
+      width: var(--bar-level, 0%);
+    }
+
+    /* ==================== Shape switching ==================== */
+
+    /* Only one shape is in the DOM flow at a time. */
+    body[data-shape='ball'] .bar,
+    body[data-shape='bar'] .ball {
+      display: none;
+    }
+
+    /* ==================== States ==================== */
+
+    body.is-cleaning .ball__ring-fill {
+      animation: pulse 1.1s ease-in-out infinite;
+    }
+
+    body.is-cleaning .bar__fill {
+      animation: pulse 1.1s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.35; }
+    }
+
+    body[data-level='warning'] { --ball-accent: #ef6c00; --ball-accent-hover: #d86000; }
+    body[data-level='danger'] { --ball-accent: #d13438; --ball-accent-hover: #b32b2f; }
+  </style>
+</head>
+<body data-shape="ball" data-edge="right">
+  <div class="ball" id="ball" role="button" tabindex="0">
+    <svg class="ball__ring" viewBox="0 0 64 64" aria-hidden="true">
+      <circle class="ball__ring-bg" cx="32" cy="32" r="28"/>
+      <circle class="ball__ring-fill" id="ball-ring" cx="32" cy="32" r="28"/>
+    </svg>
+    <div class="ball__content">
+      <span class="ball__percent" id="ball-percent">--</span>
+      <span class="ball__hint" id="ball-hint">RAM</span>
+    </div>
+  </div>
+
+  <div class="bar" id="bar" role="button" aria-hidden="true">
+    <div class="bar__fill" id="bar-fill"></div>
+  </div>
+
+  <script src="./ball.js"></script>
+</body>
+</html>

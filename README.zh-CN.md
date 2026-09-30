@@ -6,7 +6,7 @@ Fluent Reduct 是一款轻量级的 Windows 实时内存管理工具。它通过
 数据，并调用与原版 Mem Reduct 相同的系统接口释放内存，界面则采用现代的 Fluent 风格 Electron 实现。
 
 ![平台](https://img.shields.io/badge/platform-Windows-0078d4)
-![版本](https://img.shields.io/badge/version-Alpha--1.0.0-success)
+![版本](https://img.shields.io/badge/version-1.0.0--alpha.1-success)
 ![许可证](https://img.shields.io/badge/license-GPL--3.0-blue)
 
 [English](README.md) | 简体中文
