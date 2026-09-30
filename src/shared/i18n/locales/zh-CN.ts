@@ -54,6 +54,7 @@ export const zhCN = {
   'badge.win81': 'Win8.1+',
   'badge.win10': 'Win10+',
   'area.workingset': '工作集 (Working Set)',
+  'area.processworkingsets': '逐进程工作集 (Per-Process Working Sets)',
   'area.systemfilecache': '系统文件缓存 (System File Cache)',
   'area.standbypriority0': '待机优先级0列表 (Standby Priority-0)',
   'area.modifiedlist': '修改页面列表 (Modified Page List)',
@@ -132,6 +133,7 @@ export const zhCN = {
   'settings.confirmClean': '清理前确认',
   'settings.showResult': '显示清理结果',
   'settings.logResults': '记录清理日志',
+  'settings.allowStandbyList': '自动清理时一并清理待机列表',
   'settings.alwaysOnTop': '始终置顶',
   'settings.launchAtLogin': '开机自启动',
   'settings.startMinimized': '启动时最小化',
@@ -161,6 +163,8 @@ export const zhCN = {
 
   // Cleanup area results (main process)
   'areaResult.cleaned': '{label}：已清理',
+  'areaResult.processesTrimmed': '{label}：已处理 {succeeded} 个进程，跳过 {skipped} 个',
+  'areaResult.processesTrimmedPartial': '{label}：已处理 {succeeded} 个进程，跳过 {skipped} 个，{failed} 个被拒绝（安全软件自我保护）',
   'areaResult.unknown': '未知的清理区域',
   'areaResult.nativeUnavailable': '原生接口不可用',
 

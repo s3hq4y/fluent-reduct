@@ -6,7 +6,7 @@ Fluent Reduct 是一款轻量级的 Windows 实时内存管理工具。它通过
 数据，并调用与原版 Mem Reduct 相同的系统接口释放内存，界面则采用现代的 Fluent 风格 Electron 实现。
 
 ![平台](https://img.shields.io/badge/platform-Windows-0078d4)
-![版本](https://img.shields.io/badge/version-1.0.0--alpha.1-success)
+![版本](https://img.shields.io/badge/version-1.0.0--alpha.2-success)
 ![许可证](https://img.shields.io/badge/license-GPL--3.0-blue)
 
 [English](README.md) | 简体中文
@@ -15,6 +15,7 @@ Fluent Reduct 是一款轻量级的 Windows 实时内存管理工具。它通过
 
 - **实时内存概览** —— 物理内存、页面文件、系统缓存均以圆环显示：第一行为使用率，第二行为「可用/总计」。
 - **一键清理内存** —— 工作集、系统文件缓存、待机列表、修改页面列表、注册表缓存、合并内存，均基于 `NtSetSystemInformation`。
+- **逐进程工作集裁剪** —— 可选区域，逐个进程裁剪而非一刀切，因此能跳过你正在使用的进程，以及内核、会话基础设施与音频栈。裁掉眼前正在用的页面只会造成卡顿，那些页面随即又会被换回内存。
 - **默认 / 自定义两种清理方案** —— 默认方案只读地展示它将清理哪些元素；自定义方案可自由勾选。
 - **自动清理** —— 当使用率超过可配置阈值、并达到可配置间隔时自动触发（保存即生效）。
 - **清理日志** —— 在界面上持久化记录每次清理（时间、结果、释放内存、清理前后使用率）。

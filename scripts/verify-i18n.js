@@ -2,8 +2,12 @@
  * Translation coverage check.
  *
  * `Translations` already makes a missing key a compile error; this catches the
- * complementary problems that types cannot see: keys no longer referenced by any
- * source file, and `{placeholder}` tokens that differ between locales.
+ * complementary problems that types cannot see:
+ *   - keys a locale is missing, or defines but the source does not
+ *   - `{placeholder}` tokens that differ between locales
+ *   - `data-i18n*` attributes in HTML that name a key no locale defines
+ *     (markup is not type-checked, so this is the only guard against it)
+ *   - keys nothing references any more
  *
  * Run with `npm run verify:i18n`.
  */
@@ -17,14 +21,16 @@ const SOURCE_LOCALE = 'zh-CN';
 
 const KEY_PATTERN = /^\s*'([\w.]+)':\s*'((?:[^'\\]|\\.)*)',\s*$/;
 const PLACEHOLDER_PATTERN = /\{(\w+)\}/g;
+/** `data-i18n`, `data-i18n-title` and `data-i18n-aria` in markup. */
+const HTML_KEY_PATTERN = /data-i18n(?:-title|-aria)?="([\w.]+)"/g;
 
-/** Collect source files that may reference translation keys. */
-function sourceFiles(dir) {
+/** Collect files under `dir` whose name ends with one of `extensions`. */
+function sourceFiles(dir, extensions) {
   const out = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...sourceFiles(full));
-    else if (entry.name.endsWith('.ts')) out.push(full);
+    if (entry.isDirectory()) out.push(...sourceFiles(full, extensions));
+    else if (extensions.some((ext) => entry.name.endsWith(ext))) out.push(full);
   }
   return out;
 }
@@ -87,12 +93,25 @@ function main() {
     }
   }
 
-  // 3. Warn about keys nothing references any more.
+  // 3. Every key referenced from markup must exist. Markup is not type-checked,
+  //    so a typo here renders an empty label at runtime.
+  for (const file of sourceFiles(path.join(ROOT, 'src'), ['.html'])) {
+    const html = fs.readFileSync(file, 'utf8');
+    for (const match of html.matchAll(HTML_KEY_PATTERN)) {
+      const key = match[1];
+      if (!source.has(key)) {
+        failed = true;
+        console.error(`[html] unknown key '${key}' referenced in ${path.relative(ROOT, file)}`);
+      }
+    }
+  }
+
+  // 4. Warn about keys nothing references any more. Markup and code both count.
   const referenced = new Set();
-  for (const file of sourceFiles(path.join(ROOT, 'src'))) {
+  for (const file of sourceFiles(path.join(ROOT, 'src'), ['.ts', '.html'])) {
     const content = fs.readFileSync(file, 'utf8');
     for (const key of source.keys()) {
-      if (content.includes(`'${key}'`)) referenced.add(key);
+      if (content.includes(key)) referenced.add(key);
     }
   }
   const unused = [...source.keys()].filter((key) => !referenced.has(key));

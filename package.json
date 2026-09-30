@@ -1,7 +1,7 @@
 {
   "name": "fluent-reduct",
   "productName": "Fluent Reduct",
-  "version": "1.0.0-alpha.1",
+  "version": "1.0.0-alpha.2",
   "description": "Fluent Reduct - a Fluent-style memory management application (fork of Mem Reduct)",
   "main": "dist/main/main.js",
   "author": "Henry++",

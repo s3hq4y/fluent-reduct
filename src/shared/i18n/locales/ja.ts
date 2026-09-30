@@ -53,6 +53,7 @@ export const ja: Translations = {
   'badge.win81': 'Win8.1+',
   'badge.win10': 'Win10+',
   'area.workingset': 'ワーキングセット',
+  'area.processworkingsets': 'プロセスごとのワーキングセット',
   'area.systemfilecache': 'システムファイルキャッシュ',
   'area.standbypriority0': 'スタンバイ優先度0リスト',
   'area.modifiedlist': '変更済みページリスト',
@@ -131,6 +132,7 @@ export const ja: Translations = {
   'settings.confirmClean': '整理前に確認する',
   'settings.showResult': '整理結果を表示する',
   'settings.logResults': '整理ログを記録する',
+  'settings.allowStandbyList': '自動整理時にスタンバイリストも整理する',
   'settings.alwaysOnTop': '常に最前面',
   'settings.launchAtLogin': 'ログイン時に起動',
   'settings.startMinimized': '最小化して起動',
@@ -160,6 +162,8 @@ export const ja: Translations = {
 
   // Cleanup area results (main process)
   'areaResult.cleaned': '{label}: 整理しました',
+  'areaResult.processesTrimmed': '{label}: {succeeded} 件のプロセスを処理、{skipped} 件をスキップ',
+  'areaResult.processesTrimmedPartial': '{label}: {succeeded} 件のプロセスを処理、{skipped} 件をスキップ、{failed} 件が拒否（セキュリティソフトの自己保護）',
   'areaResult.unknown': '不明な整理領域',
   'areaResult.nativeUnavailable': 'ネイティブ API を利用できません',
 

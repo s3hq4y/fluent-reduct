@@ -5,7 +5,20 @@ Entries above the divider describe this fork; everything below it is the
 upstream Mem Reduct changelog, kept for reference.
 -->
 
+## 1.0.0-alpha.2
+
+- Added optional per-process working set trimming: processes are trimmed one at
+a time, so the foreground process, the kernel, session infrastructure and the
+audio stack are skipped. The existing whole-system working set clear remains
+as-is; this is a more selective alternative.
+- Cleanup areas that can freeze the system now carry a warning badge, and the
+group-level badge was replaced by per-area ones so the warning lands on the
+right rows.
+- Fixed an untranslated label in Settings, and taught `verify:i18n` to check
+`data-i18n` attributes in markup - the gap that let it through.
+
 ## 1.0.0-alpha.1
+
 
 - Cleanup is now owned by the main process, so a run no longer has to reveal
 the main window; the floating ball's double-click cleans silently and reports

@@ -31,6 +31,7 @@ export interface CleanupAreaGroup {
  */
 export const CLEANUP_AREA_ORDER: readonly CleanupArea[] = [
   'workingset',
+  'processworkingsets',
   'systemfilecache',
   'modifiedfilecache',
   'modifiedlist',
@@ -42,10 +43,11 @@ export const CLEANUP_AREA_ORDER: readonly CleanupArea[] = [
 
 export const CLEANUP_AREA_INFO: Record<CleanupArea, CleanupAreaInfo> = {
   workingset: { labelKey: 'area.workingset', group: 'basic' },
+  processworkingsets: { labelKey: 'area.processworkingsets', group: 'advanced' },
   systemfilecache: { labelKey: 'area.systemfilecache', group: 'basic' },
   standbypriority0: { labelKey: 'area.standbypriority0', group: 'basic' },
-  modifiedlist: { labelKey: 'area.modifiedlist', group: 'advanced' },
-  standbylist: { labelKey: 'area.standbylist', group: 'advanced' },
+  modifiedlist: { labelKey: 'area.modifiedlist', group: 'advanced', badgeKey: 'badge.freeze' },
+  standbylist: { labelKey: 'area.standbylist', group: 'advanced', badgeKey: 'badge.freeze' },
   modifiedfilecache: { labelKey: 'area.modifiedfilecache', group: 'advanced' },
   registrycache: { labelKey: 'area.registrycache', group: 'extended' },
   combinememory: { labelKey: 'area.combinememory', group: 'extended', badgeKey: 'badge.win10' },
@@ -54,7 +56,7 @@ export const CLEANUP_AREA_INFO: Record<CleanupArea, CleanupAreaInfo> = {
 /** Display order of the area groups in Settings. */
 export const CLEANUP_AREA_GROUPS: readonly CleanupAreaGroup[] = [
   { id: 'basic', titleKey: 'areaGroup.basic' },
-  { id: 'advanced', titleKey: 'areaGroup.advanced', badgeKey: 'badge.freeze' },
+  { id: 'advanced', titleKey: 'areaGroup.advanced' },
   { id: 'extended', titleKey: 'areaGroup.extended', badgeKey: 'badge.win81' },
 ];
 
@@ -67,6 +69,7 @@ export const STANDBY_PURGE_AREAS: readonly CleanupArea[] = ['standbylist'];
 /** Areas cleaned by the built-in default profile. */
 export const DEFAULT_CLEANUP_AREAS: Record<CleanupArea, boolean> = {
   workingset: true,
+  processworkingsets: false,
   systemfilecache: true,
   standbypriority0: true,
   modifiedlist: false,

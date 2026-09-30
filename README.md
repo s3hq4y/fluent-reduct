@@ -8,7 +8,7 @@ system interfaces as the original Mem Reduct, presented behind a modern, Fluent-
 Electron interface.
 
 ![Platform](https://img.shields.io/badge/platform-Windows-0078d4)
-![Version](https://img.shields.io/badge/version-1.0.0--alpha.1-success)
+![Version](https://img.shields.io/badge/version-1.0.0--alpha.2-success)
 ![License](https://img.shields.io/badge/license-GPL--3.0-blue)
 
 ## Features
@@ -17,6 +17,10 @@ Electron interface.
   as a ring with usage on the first line and free/total on the second.
 - **One-click memory cleanup** — working set, system file cache, standby lists, modified
   lists, registry cache and memory combining, powered by `NtSetSystemInformation`.
+- **Per-process working set trimming** — an optional area that trims processes one by one
+  instead of all at once, so it can skip the process you are currently using, plus the
+  kernel, session infrastructure and audio stack. Trimming what is on screen only costs
+  a stutter; those pages are faulted straight back in.
 - **Default and custom cleanup profiles** — the default profile shows exactly which areas it
   will clean (read-only); a custom profile lets you pick areas freely.
 - **Auto cleanup** — trigger automatically above a configurable usage threshold, at a

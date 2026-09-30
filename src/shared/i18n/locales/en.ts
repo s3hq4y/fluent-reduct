@@ -53,6 +53,7 @@ export const en: Translations = {
   'badge.win81': 'Win8.1+',
   'badge.win10': 'Win10+',
   'area.workingset': 'Working Set',
+  'area.processworkingsets': 'Per-Process Working Sets',
   'area.systemfilecache': 'System File Cache',
   'area.standbypriority0': 'Standby Priority-0',
   'area.modifiedlist': 'Modified Page List',
@@ -131,6 +132,7 @@ export const en: Translations = {
   'settings.confirmClean': 'Confirm before cleanup',
   'settings.showResult': 'Show cleanup result',
   'settings.logResults': 'Record cleanup log',
+  'settings.allowStandbyList': 'Also purge the standby list during auto cleanup',
   'settings.alwaysOnTop': 'Always on top',
   'settings.launchAtLogin': 'Launch at login',
   'settings.startMinimized': 'Start minimized',
@@ -160,6 +162,8 @@ export const en: Translations = {
 
   // Cleanup area results (main process)
   'areaResult.cleaned': '{label}: cleaned',
+  'areaResult.processesTrimmed': '{label}: trimmed {succeeded} processes, skipped {skipped}',
+  'areaResult.processesTrimmedPartial': '{label}: trimmed {succeeded} processes, skipped {skipped}, {failed} refused (self-protected software)',
   'areaResult.unknown': 'Unknown cleanup area',
   'areaResult.nativeUnavailable': 'Native interface unavailable',
 

@@ -44,6 +44,7 @@ export interface MemoryDiagnostics {
 
 export type CleanupArea =
   | 'workingset'
+  | 'processworkingsets'
   | 'systemfilecache'
   | 'standbypriority0'
   | 'modifiedlist'

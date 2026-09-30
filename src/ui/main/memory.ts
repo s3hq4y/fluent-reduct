@@ -15,6 +15,7 @@
 
 import * as os from 'os';
 import { CLEANUP_AREA_INFO, CLEANUP_AREA_ORDER } from '../../shared/cleanup';
+import { trimProcessWorkingSets, type ProcessEntry, type TrimPort } from './process-trim';
 import type { Translator, TranslationKey } from '../../shared/i18n/translate';
 import type {
   AreaResult,
@@ -55,6 +56,16 @@ interface NativeBindings {
     wasEnabled: number[]
   ) => number;
   isUserAnAdmin: () => number;
+  createToolhelp32Snapshot: (flags: number, pid: number) => unknown;
+  process32First: (snapshot: unknown, entry: unknown) => number;
+  process32Next: (snapshot: unknown, entry: unknown) => number;
+  openProcess: (access: number, inherit: number, pid: number) => unknown;
+  closeHandle: (handle: unknown) => number;
+  emptyWorkingSet: (handle: unknown) => number;
+  getForegroundWindow: () => unknown;
+  getWindowThreadProcessId: (hwnd: unknown, pid: number[]) => number;
+  /** Size of PROCESSENTRY32W, resolved at init so callers need not know it. */
+  processEntrySize: number;
 }
 
 let bindings: NativeBindings | null = null;
@@ -101,9 +112,24 @@ function initNative(): void {
       ThreadCount: 'uint32',
     });
 
+    const PROCESSENTRY32W = koffi.struct('PROCESSENTRY32W', {
+      dwSize: 'uint32',
+      cntUsage: 'uint32',
+      th32ProcessID: 'uint32',
+      th32DefaultHeapID: 'uintptr_t',
+      th32ModuleID: 'uint32',
+      cntThreads: 'uint32',
+      th32ParentProcessID: 'uint32',
+      pcPriClassBase: 'int32',
+      dwFlags: 'uint32',
+      szExeFile: koffi.array('char16_t', 260),
+    });
+
     const kernel32 = koffi.load('kernel32.dll');
     const ntdll = koffi.load('ntdll.dll');
     const shell32 = koffi.load('shell32.dll');
+    const psapi = koffi.load('psapi.dll');
+    const user32 = koffi.load('user32.dll');
 
     bindings = {
       koffi,
@@ -123,11 +149,32 @@ function initNative(): void {
         'int32 RtlAdjustPrivilege(uint32 Privilege, uint8 Enable, uint8 Client, _Out_ uint8 *WasEnabled)'
       ),
       isUserAnAdmin: shell32.func('int IsUserAnAdmin()'),
+      // EmptyWorkingSet lives in psapi, not kernel32.
+      emptyWorkingSet: psapi.func('int EmptyWorkingSet(void* hProcess)'),
+      createToolhelp32Snapshot: kernel32.func(
+        'void* CreateToolhelp32Snapshot(uint32 dwFlags, uint32 th32ProcessID)'
+      ),
+      process32First: kernel32.func(
+        'int Process32FirstW(void* hSnapshot, _Inout_ PROCESSENTRY32W *lppe)'
+      ),
+      process32Next: kernel32.func(
+        'int Process32NextW(void* hSnapshot, _Inout_ PROCESSENTRY32W *lppe)'
+      ),
+      openProcess: kernel32.func(
+        'void* OpenProcess(uint32 dwDesiredAccess, int bInheritHandle, uint32 dwProcessId)'
+      ),
+      closeHandle: kernel32.func('int CloseHandle(void* hObject)'),
+      getForegroundWindow: user32.func('void* GetForegroundWindow()'),
+      getWindowThreadProcessId: user32.func(
+        'uint32 GetWindowThreadProcessId(void* hWnd, _Out_ uint32 *lpdwProcessId)'
+      ),
+      processEntrySize: koffi.sizeof(PROCESSENTRY32W),
     };
 
     // Touch the structs so an ABI mismatch surfaces during init rather than mid-cleanup.
     void MEMORYSTATUSEX;
     void PERFORMANCE_INFORMATION;
+    void PROCESSENTRY32W;
   } catch (err) {
     bindings = null;
     loadError = err instanceof Error ? err.message : String(err);
@@ -353,18 +400,125 @@ function combineBuffer(): Buffer {
   return Buffer.alloc(PTR_SIZE === 8 ? 24 : 12);
 }
 
-type AreaAction = () => number;
+/**
+ * Result of running one cleanup area.
+ *
+ * Most areas are a single NtSetSystemInformation call and report its NTSTATUS.
+ * Per-process trimming has no such status - it reports how many processes it
+ * touched - so the two shapes stay distinct instead of faking a status code.
+ */
+type AreaOutcome =
+  | { kind: 'ntstatus'; status: number }
+  | { kind: 'trim'; succeeded: number; failed: number; skipped: number };
 
+type AreaAction = () => AreaOutcome;
+
+// ==================== Per-process trimming ====================
+
+/** Access rights needed to trim another process' working set. */
+const PROCESS_QUERY_LIMITED_INFORMATION = 0x1000;
+const PROCESS_SET_QUOTA = 0x0100;
+
+const TH32CS_SNAPPROCESS = 0x00000002;
+
+/**
+ * koffi returns `void*` as a BigInt, so handle comparisons must be BigInt too -
+ * `handle === -1` would compare a BigInt against a number and never match.
+ * A null or zero handle is equally unusable.
+ */
+function isInvalidHandle(handle: unknown): boolean {
+  if (handle === null || handle === undefined) return true;
+  if (typeof handle === 'bigint') return handle === 0n || handle === -1n;
+  if (typeof handle === 'number') return handle === 0 || handle === -1;
+  return false;
+}
+
+/**
+ * Adapter that exposes the native bindings to `process-trim`, so that module
+ * stays free of FFI details.
+ */
+function createTrimPort(): TrimPort {
+  if (!bindings) throw new Error('native bindings unavailable');
+  const native = bindings;
+
+  return {
+    enumerate(): ProcessEntry[] | null {
+      const snapshot = native.createToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+      if (isInvalidHandle(snapshot)) return null;
+
+      try {
+        // koffi decodes the inline `char16_t[260]` into a JS string, so the
+        // name is read directly - calling koffi.decode on it throws, because a
+        // string is not a pointer.
+        const entry: Record<string, unknown> = { dwSize: native.processEntrySize };
+        const processes: ProcessEntry[] = [];
+
+        if (!native.process32First(snapshot, entry)) return processes;
+
+        do {
+          processes.push({
+            pid: Number(entry.th32ProcessID),
+            name: String(entry.szExeFile ?? ''),
+          });
+        } while (native.process32Next(snapshot, entry));
+
+        return processes;
+      } finally {
+        native.closeHandle(snapshot);
+      }
+    },
+
+    open(pid: number): unknown | null {
+      const handle = native.openProcess(
+        PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SET_QUOTA,
+        0,
+        pid
+      );
+      return isInvalidHandle(handle) ? null : handle;
+    },
+
+    emptyWorkingSet(handle: unknown): boolean {
+      return native.emptyWorkingSet(handle) !== 0;
+    },
+
+    close(handle: unknown): void {
+      native.closeHandle(handle);
+    },
+
+    foregroundPid(): number {
+      const hwnd = native.getForegroundWindow();
+      if (isInvalidHandle(hwnd)) return 0;
+      const pid: number[] = [0];
+      native.getWindowThreadProcessId(hwnd, pid);
+      return pid[0];
+    },
+  };
+}
+
+/**
+ * Trim the working sets of every process it is safe to trim.
+ *
+ * The foreground process is resolved here rather than passed in, so the
+ * protection reflects the window the user is looking at when the run starts.
+ */
+function emptyProcessWorkingSets(): AreaOutcome {
+  const port = createTrimPort();
+  const summary = trimProcessWorkingSets(port, process.pid, port.foregroundPid());
+  return { kind: 'trim', ...summary };
+}
 function buildActions(): Record<CleanupArea, AreaAction> {
   if (!bindings) {
     throw new Error('native bindings unavailable');
   }
 
-  const setInfo = (cls: number, buf: Buffer | null): number =>
-    bindings!.ntSetSystemInformation(cls, buf, buf ? buf.length : 0);
+  const setInfo = (cls: number, buf: Buffer | null): AreaOutcome => ({
+    kind: 'ntstatus',
+    status: bindings!.ntSetSystemInformation(cls, buf, buf ? buf.length : 0),
+  });
 
   return {
     workingset: () => setInfo(SystemMemoryListInformation, commandBuffer(MemoryEmptyWorkingSets)),
+    processworkingsets: emptyProcessWorkingSets,
     systemfilecache: () => setInfo(SystemFileCacheInformation, fileCacheBuffer()),
     modifiedfilecache: () => setInfo(SystemFileCacheInformationEx, fileCacheBuffer()),
     standbypriority0: () =>
@@ -457,16 +611,43 @@ export async function cleanupMemory(
     onProgress?.({ area, label, index: i, total: areas.length });
 
     try {
-      const status = action();
-      const ok = status >= 0;
-      areaResults.push({
-        area,
-        ok,
-        status: `0x${(status >>> 0).toString(16).padStart(8, '0')}`,
-        message: ok
-          ? t('areaResult.cleaned', { label })
-          : `${label}: ${statusText(status, t)}`,
-      });
+      const outcome = action();
+
+      if (outcome.kind === 'ntstatus') {
+        const ok = outcome.status >= 0;
+        areaResults.push({
+          area,
+          ok,
+          status: `0x${(outcome.status >>> 0).toString(16).padStart(8, '0')}`,
+          message: ok
+            ? t('areaResult.cleaned', { label })
+            : `${label}: ${statusText(outcome.status, t)}`,
+        });
+      } else {
+        // Trimming is a best-effort sweep over processes we do not own, so the
+        // bar for success is "something was trimmed", not "nothing anywhere
+        // refused". Security software self-protects its working set by design,
+        // and counting that as our failure would misreport every run.
+        const trimmedSomething = outcome.succeeded > 0;
+        const nothingWentWrong = outcome.failed === 0;
+        const ok = trimmedSomething || nothingWentWrong;
+
+        const params = {
+          label,
+          succeeded: outcome.succeeded,
+          skipped: outcome.skipped,
+          failed: outcome.failed,
+        };
+        areaResults.push({
+          area,
+          ok,
+          status: ok ? 'ok' : 'failed',
+          message:
+            outcome.failed > 0
+              ? t('areaResult.processesTrimmedPartial', params)
+              : t('areaResult.processesTrimmed', params),
+        });
+      }
     } catch (err) {
       areaResults.push({
         area,
