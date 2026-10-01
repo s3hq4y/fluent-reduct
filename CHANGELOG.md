@@ -5,7 +5,16 @@ Entries above the divider describe this fork; everything below it is the
 upstream Mem Reduct changelog, kept for reference.
 -->
 
+## 1.0.0-alpha.3
+
+- The floating ball is now pinned above every other always-on-top window: it
+uses the highest topmost level Electron exposes on Windows, and re-asserts
+that level whenever it is shown, so a fullscreen app taking over the screen
+no longer pushes it behind. It still stays out of the way of fullscreen apps
+themselves.
+
 ## 1.0.0-alpha.2
+
 
 - Added optional per-process working set trimming: processes are trimmed one at
 a time, so the foreground process, the kernel, session infrastructure and the

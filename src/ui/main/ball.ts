@@ -44,6 +44,15 @@ const DOCK_SNAP_PX = 28;
 /** Gap from the screen edge used by the default position. */
 const EDGE_MARGIN = 24;
 
+/**
+ * Always-on-top level for the ball.
+ *
+ * Electron maps this to the Win32 topmost level; `screen-saver` is the highest
+ * one available, so the ball stays above other always-on-top windows instead of
+ * only above normal ones.
+ */
+const ALWAYS_ON_TOP_LEVEL = 'screen-saver';
+
 let ballWindow: BrowserWindow | null = null;
 
 /** Centre of the ball, in screen coordinates. Preserved across shape changes. */
@@ -228,9 +237,16 @@ function createBall(): void {
     },
   });
 
-  // Float above normal windows without covering fullscreen apps or the taskbar.
-  ballWindow.setAlwaysOnTop(true, 'floating');
+  // Float above normal windows and other always-on-top windows, but keep clear
+  // of fullscreen apps so the ball never covers a game or a video.
+  ballWindow.setAlwaysOnTop(true, ALWAYS_ON_TOP_LEVEL);
   ballWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: false });
+
+  // Re-assert topmost whenever the window is shown: some fullscreen apps reset
+  // the topmost flag of unrelated windows when they take over the screen.
+  ballWindow.on('show', () => {
+    ballWindow?.setAlwaysOnTop(true, ALWAYS_ON_TOP_LEVEL);
+  });
 
   void ballWindow.loadFile(BALL_ENTRY);
 
